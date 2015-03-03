@@ -1,0 +1,30 @@
+{
+  "name": "json-schema-validator",
+  "version": "0.1.0",
+  "description": "Custom JSON schema validator using jjv",
+  "main": "validator.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jgrenat/json-schema-validator.git"
+  },
+  "keywords": [
+    "validator",
+    "json schema",
+    "json",
+    "validation"
+  ],
+  "author": "jgrenat",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jgrenat/json-schema-validator/issues"
+  },
+  "homepage": "https://github.com/jgrenat/json-schema-validator",
+  "dependencies": {
+    "jjv": "^1.0.2",
+    "lodash": "^3.3.1",
+    "lodash-deep": "^1.5.3"
+  }
+}
