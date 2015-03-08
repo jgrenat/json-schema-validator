@@ -1,7 +1,7 @@
 {
-  "name": "json-schema-validator",
-  "version": "0.2.0",
-  "description": "Custom JSON schema validator using jjv",
+  "name": "duly-validator",
+  "version": "0.2.1",
+  "description": "Custom JSON schema (using jjv) + function validator",
   "main": "validator.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
