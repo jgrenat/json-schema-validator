@@ -7,13 +7,20 @@
 'use strict';
 
 var env = require('jjv')();
-var _ = require('lodash');
+var _   = require('lodash');
 _.mixin(require('lodash-deep'));
 
 var validationFunctions = {};
+var replacements        = {};
 
 env.defaultOptions.checkRequired = true;
 
+
+/**
+ * Normalize jjv errors
+ * @param  {object} errors list of errors
+ * @return {object}        the normalized list of errors
+ */
 function normalize(errors) {
     if(!_.isObject(errors)) {
         return errors;
@@ -28,23 +35,52 @@ function normalize(errors) {
         }
     }
     _.forOwn(errors, function(error, key) {
-        if(key === 'minItems' || key === 'maxItems') {
-            errors['wrongCount'] = true;
-            delete errors[key];
-        } else if(key === 'type' || key === 'enum') {
-            errors['invalid'] = true;
-            delete errors[key];
-        } else if(key === 'uniqueItems') {
-            errors['duplicate'] = true;
-            delete errors[key];
-        } else if(key === 'minLength') {
-            errors['tooShort'] = true;
-            delete errors[key];
-        } else if(key === 'maxLength') {
-            errors['tooLong'] = true;
-            delete errors[key];
-        } else {
-            errors[key] = normalize(error);
+        errors[key] = normalize(error);
+    });
+
+    return errors;
+}
+
+
+/**
+ * Add replacements to make
+ * @param {object} newReplacements the new replacement rules
+ */
+exports.addReplacements = function(newReplacements) {
+    replacements = _.merge(replacements, newReplacements);
+}
+
+
+/**
+ * Make replacements in the errors
+ * @param  {object} errors       list of errors
+ * @param  {object} replacements list of replacements to add
+ * @param  {array}  currentPath  current path
+ * @return {object}              list of updated errors
+ */
+function makeReplacements(errors, replacements, currentPath) {
+    currentPath = currentPath || [];
+    var path    = currentPath.join('.');
+
+    _.forOwn(errors, function(error, key) {
+        var changed = false;
+        _.forOwn(replacements, function(replacementValue, replacementPattern) {
+            // Check if the path match the replacement rule (regexp or string)
+            var finalPath = (path ? path + '.' : '') + key;
+            var match = _.isRegExp(replacementPattern) ? finalPath.test(replacementPattern) : _.endsWith(finalPath, replacementPattern);
+            if(match) {
+                changed = true;
+                // Replace value by deleting the key and adding every key in replacementValue
+                delete errors[key];
+                _.forOwn(replacementValue, function(errorValue, errorKey) {
+                    _.deepSet(errors, errorKey, errorValue);
+                });
+            }
+        });
+        if(!changed) {
+            currentPath.push(key);
+            errors[key] = makeReplacements(error, replacements, currentPath);
+            currentPath.pop();
         }
     });
 
@@ -52,36 +88,19 @@ function normalize(errors) {
 }
 
 /**
- * Load a validator
- * @param name string the name of the validator
- * @param schema object the validator (containing valid
- */
-exports.load = function(name, validator) {
-    validationFunctions[name] = validator.validation;
-    env.addSchema(name, validator.schema);
-};
-
-/**
- * Returns whether there is a schema with the given name loaded or not
- * @param schemaName : name of the schema
- * @returns boolean
- */
-exports.hasSchema = function(schemaName) {
-    return _.keys(validationFunctions).indexOf(schemaName) !== -1;
-};
-
-/**
  * Validate data with a validator
  * The validation can be asynchronous
- * @param validatorName string the name of the object
+ * @param validationProfile object the validator schema and validation function
  * @param data object the data
  * @param callback the callback function
  * @param {object} [options] object the options of validation
  */
-exports.validate = function(validatorName, data, callback, options) {
+exports.validate = function(validationProfile, data, callback, options) {
     // JSON Schema validation
-    var errors = env.validate(validatorName, data, options);
-    errors = errors ? normalize(errors.validation) : {};
+    options = options || {};
+    var errors = env.validate(validationProfile.schema, data, options);
+    var currentReplacements = _.merge(replacements, options.replacements || {});
+    errors = errors ? makeReplacements(normalize(errors.validation), currentReplacements) : {};
 
     // Function to add an error to the list
     var addError = function (field, error) {
@@ -94,8 +113,8 @@ exports.validate = function(validatorName, data, callback, options) {
     };
 
     // If there is no validation function, we can call the callback
-    if(!validationFunctions[validatorName]) {
-        callback && callback(errors, data);
+    if(!_.isFunction(validationProfile.validation)) {
+        callback && callback(!_.isEmpty(errors) ? errors : null, data);
         return;
     }
 
@@ -103,8 +122,7 @@ exports.validate = function(validatorName, data, callback, options) {
         addError: addError,
         options: options,
         errors: errors,
-        done: function() { callback(errors, data); }
+        done: function() { callback(!_.isEmpty(errors) ? errors : null, data); }
     };
-    validationFunctions[validatorName].call(context, data, errors);
-    return;
+    validationProfile.validation.call(context, data, errors);
 };
